@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Mirror" />
+  <meta name="theme-color" content="#000000" />
+  <title>Mirror</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    #video {
+      position: fixed;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* mirror like a real mirror */
+      background: #000;
+    }
+
+    #controls {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 20px) env(safe-area-inset-right, 20px)
+               env(safe-area-inset-bottom, 20px) env(safe-area-inset-left, 20px);
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    #controls.hidden { opacity: 0; pointer-events: none; }
+    #controls:not(.hidden) { pointer-events: all; }
+
+    /* Top bar */
+    #top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+
+    #title {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.7);
+    }
+
+    .icon-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .icon-btn:active { background: rgba(255,255,255,0.35); }
+
+    /* Bottom controls */
+    #bottom-bar {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 16px;
+      padding: 14px 20px;
+      width: min(420px, 90vw);
+    }
+
+    .slider-icon { color: #fff; font-size: 18px; flex-shrink: 0; }
+    .slider-icon.small { font-size: 14px; opacity: 0.7; }
+
+    input[type=range] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255,255,255,0.4);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    #hint {
+      color: rgba(255,255,255,0.45);
+      font-size: 13px;
+      text-align: center;
+      padding-bottom: 4px;
+    }
+
+    /* Permission / error overlay */
+    #overlay {
+      position: fixed; inset: 0;
+      background: #000;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px; padding: 40px;
+      text-align: center;
+    }
+
+    #overlay svg { opacity: 0.5; }
+    #overlay p { color: rgba(255,255,255,0.7); font-size: 17px; line-height: 1.5; }
+
+    #retry-btn {
+      margin-top: 8px;
+      padding: 14px 32px;
+      border-radius: 14px;
+      border: none;
+      background: #fff;
+      color: #000;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #overlay.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+
+<div id="controls">
+  <div id="top-bar">
+    <span id="title">Mirror</span>
+    <button class="icon-btn" id="zoom-btn" title="Toggle zoom">&#x1F50D;</button>
+  </div>
+
+  <div id="bottom-bar">
+    <div class="slider-row">
+      <span class="slider-icon small">&#9728;</span>
+      <input type="range" id="brightness" min="0" max="200" value="100" />
+      <span class="slider-icon">&#9728;</span>
+    </div>
+    <div id="hint">Tap screen to hide controls</div>
+  </div>
+</div>
+
+<div id="overlay">
+  <svg width="64" height="64" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+  <p id="overlay-msg">Allow camera access to use Mirror.</p>
+  <button id="retry-btn">Enable Camera</button>
+</div>
+
+<script>
+  const video = document.getElementById('video');
+  const controls = document.getElementById('controls');
+  const overlay = document.getElementById('overlay');
+  const overlayMsg = document.getElementById('overlay-msg');
+  const retryBtn = document.getElementById('retry-btn');
+  const zoomBtn = document.getElementById('zoom-btn');
+  const brightnessSlider = document.getElementById('brightness');
+
+  let stream = null;
+  let track = null;
+  let isZoomed = false;
+  let hideTimer = null;
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      track = stream.getVideoTracks()[0];
+      overlay.classList.add('hidden');
+      scheduleHide();
+    } catch (err) {
+      overlay.classList.remove('hidden');
+      if (err.name === 'NotAllowedError') {
+        overlayMsg.textContent = 'Camera permission denied. Tap below and allow camera access in Safari settings.';
+      } else if (err.name === 'NotFoundError') {
+        overlayMsg.textContent = 'No front camera found on this device.';
+      } else {
+        overlayMsg.textContent = 'Could not start camera: ' + err.message;
+      }
+    }
+  }
+
+  retryBtn.addEventListener('click', startCamera);
+
+  // ── Brightness (CSS filter on the video) ─────────────────────────────────
+  brightnessSlider.addEventListener('input', () => {
+    video.style.filter = `brightness(${brightnessSlider.value}%)`;
+  });
+
+  // ── Zoom ─────────────────────────────────────────────────────────────────
+  zoomBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!track) return;
+    const caps = track.getCapabilities();
+    if (!caps.zoom) {
+      // Fallback: CSS scale zoom
+      isZoomed = !isZoomed;
+      video.style.transform = isZoomed ? 'scaleX(-1) scale(2)' : 'scaleX(-1)';
+      zoomBtn.textContent = isZoomed ? '🔍' : '🔍';
+      zoomBtn.style.opacity = isZoomed ? '1' : '0.85';
+      return;
+    }
+    isZoomed = !isZoomed;
+    const zoom = isZoomed ? Math.min(2, caps.zoom.max) : caps.zoom.min;
+    await track.applyConstraints({ advanced: [{ zoom }] });
+    zoomBtn.innerHTML = isZoomed ? '&#x2212;&#x1F50D;' : '&#x1F50D;';
+  });
+
+  // ── Show / hide controls on tap ───────────────────────────────────────────
+  function scheduleHide() {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => controls.classList.add('hidden'), 4000);
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#controls') && !e.target.closest('#top-bar') && !e.target.closest('#bottom-bar')) {
+      return; // click on empty area of controls overlay
+    }
+    if (controls.classList.contains('hidden')) {
+      controls.classList.remove('hidden');
+      scheduleHide();
+    } else if (!e.target.closest('.icon-btn') && !e.target.closest('.slider-row')) {
+      controls.classList.add('hidden');
+    }
+  });
+
+  // ── Keep screen awake (Wake Lock API) ────────────────────────────────────
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try { await navigator.wakeLock.request('screen'); } catch (_) {}
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') requestWakeLock();
+  });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────
+  requestWakeLock();
+  startCamera();
+</script>
+</body>
+</html>
